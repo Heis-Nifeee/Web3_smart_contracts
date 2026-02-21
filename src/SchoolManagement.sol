@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.13;
+// SPDX-License-Identifier: SEE LICENSE IN LICENSE
+pragma solidity  ^0.8.13;
 
 import "./IERC20.sol";
 
@@ -70,22 +70,23 @@ contract SchoolManagement {
         string role;
         uint256 salary;
         uint256 lastPaid;
-        bool exists;
         bool suspended;
+        bool exists;
     }
 
     mapping(address => Student) students;
     mapping(address => Staff) staffs;
 
-    address[] allStudents;
-    address[] allStaffs;
+    Student[] allStudents;
+    Staff[] allStaffs;
 
     mapping(uint256 => uint256) levelFees;
 
     event StudentEnrolled(address indexed student, string name, uint256 level, uint256 feePaid, uint256 timestamp);
     event StaffEmployed(address indexed staff, string name, string role, uint256 salary);
     event StaffPaid(address indexed staff, uint256 amount, uint256 timestamp);
-    event StaffSuspended(address indexed staff, bool suspended);
+    event StaffSuspended(address indexed staff, bool indexed suspended);
+    event StudentRemoved(address indexed student, uint256 indexed removedAt);
 
     function setLevelFees() external onlyOwner() {
         levelFees[100] = 100 * 10**18;
@@ -101,7 +102,9 @@ contract SchoolManagement {
 
         uint256 fee = levelFees[_level];
         require(fee > 0, "INSUFFIENT LEVEL FEE");
-        require(token.transferFrom(_student, address(this), fee), "FEE TRANSFER FAILED");
+
+        require(
+            token.transferFrom(_student, address(this), fee), "FEE TRANSFER FAILED");
 
         uint256 studentId = studentIdCounter;
 
@@ -115,27 +118,40 @@ contract SchoolManagement {
             paidAt: block.timestamp
         });
 
-        allStudents.push(_student);
+        allStudents.push(students[_student]);
 
         studentIdCounter++;
 
         emit StudentEnrolled(_student, _name, _level, fee, block.timestamp);
     }
 
-    function getAllStudentsWithDetails() external view returns (Student[] memory) {
-        uint256 count = allStudents.length;
-        Student[] memory list = new Student[](count);
+    function removeStudent(address _student) external onlyAdmin validAddress(_student) {
+        Student storage st = students[_student];
 
-        for (uint256 i = 0; i < count; i++) {
-            list[i] = students[allStudents[i]];
+        require(st.studentAddress != address(0), "STUDENT NOT FOUND");
+
+        uint256 length = allStudents.length;
+        for (uint256 i = 0; i < length; i++) {
+            if (allStudents[i].studentAddress == _student) {
+                allStudents[i] = allStudents[length - 1];
+                allStudents.pop();
+                break;
+            }
         }
+    delete students[_student];
 
-        return list;
+        emit StudentRemoved(_student, block.timestamp);
+    }
+
+    function getAllStudentsWithDetails() external view returns (Student[] memory) {
+        return allStudents;
     }
 
     function employStaff(address _staff, string memory _name, string memory _role, uint256 _salary) external onlyOwner() validAddress(_staff) notStudent(_staff) {
         require(!staffs[_staff].exists, "STAFF ALREADY EMPLOYED");
         require(_salary > 0, "SALARY MUST BE GREATER THAN 0");
+        require(_staff != owner, "YOU'RE THE SCHOOL OWNER");
+        require(_staff != admin, "YOU'RE THE SCHOOL ADMIN");
 
         uint256 staffId = staffIdCounter;
 
@@ -150,7 +166,7 @@ contract SchoolManagement {
             suspended: false
         });
 
-        allStaffs.push(_staff);
+        allStaffs.push(staffs[_staff]);
 
         staffIdCounter++;
 
@@ -164,8 +180,9 @@ contract SchoolManagement {
         Staff storage st = staffs[_staff];
 
         require(st.exists, "STAFF NOT FOUND");
-        require(!st.suspended, "STAFF IS SUSPENDED");
         require(st.salary > 0, "INVALID SALARY");
+        require(!st.suspended, "STAFF ");
+
         require(token.transfer(_staff, st.salary), "PAYMENT FAILED");
 
         st.lastPaid = block.timestamp;
@@ -173,7 +190,7 @@ contract SchoolManagement {
         emit StaffPaid(_staff, st.salary, block.timestamp);
     }
 
-    function suspendStaff(address _staff, bool _suspend) external onlyOwner() validAddress(_staff) {
+    function suspendStaff(address _staff, bool _suspend) external onlyOwner() validAddress(_staff) notStudent(_staff) {
         require(staffs[_staff].exists, "STAFF NOT FOUND");
         
         staffs[_staff].suspended = _suspend;
@@ -181,7 +198,7 @@ contract SchoolManagement {
         emit StaffSuspended(_staff, _suspend);
     }
 
-    function getAllStaff() external view returns(address[] memory) {
+    function getAllStaff() external view returns(Staff[] memory) {
         return allStaffs;
     }
 
