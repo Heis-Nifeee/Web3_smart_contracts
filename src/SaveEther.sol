@@ -19,21 +19,11 @@ contract SaveEther {
 
     function withdraw(uint256 _amount) external {
         require(msg.sender != address(0), "Address zero detected");
-
-        // the balance mapping is a key to value pair, if the key is
-        // provided it retuns the value at that location.
-        //
         uint256 userSavings_ = balances[msg.sender];
-
         require(userSavings_ > 0, "Insufficient funds");
-
         balances[msg.sender] = userSavings_ - _amount;
-
-        // (bool result,) = msg.sender.call{value: msg.value}("");
         (bool result, bytes memory data) = payable(msg.sender).call{value: _amount}("");
-
         require(result, "transfer failed");
-
         emit WithdrawalSuccessful(msg.sender, _amount, data);
     }
 
